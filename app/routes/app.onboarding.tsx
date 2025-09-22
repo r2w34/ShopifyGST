@@ -30,26 +30,104 @@ import { validateGSTIN } from "../utils/gst.server";
 import { INDIAN_STATES, validateGSTINFormat } from "../utils/gst.client";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  console.log("Onboarding loader - URL:", request.url);
+  
+  try {
+    const { session } = await authenticate.admin(request);
+    console.log("Onboarding loader - Authenticated shop:", session.shop);
 
-  // Check if onboarding is already completed
-  const settings = await prisma.appSettings.findUnique({
-    where: { shop: session.shop },
-  });
+    // Check if onboarding is already completed
+    const settings = await prisma.appSettings.findUnique({
+      where: { shop: session.shop },
+    });
 
-  if (settings && settings.companyName && settings.companyGSTIN) {
-    // Onboarding already completed, redirect to dashboard
-    return redirect("/app");
+    if (settings && settings.companyName && settings.companyGSTIN) {
+      // Onboarding already completed, redirect to dashboard
+      console.log("Onboarding already completed, redirecting to /app");
+      return redirect("/app");
+    }
+
+    const url = new URL(request.url);
+    const step = parseInt(url.searchParams.get("step") || "1");
+
+    return json({
+      shop: session.shop,
+      currentStep: Math.max(1, Math.min(4, step)),
+      settings: settings || null,
+    });
+  } catch (error) {
+    console.log("Authentication failed in onboarding, attempting to preserve shop parameter");
+    console.log("Error details:", error);
+    
+    // Extract shop parameter from the request URL
+    const url = new URL(request.url);
+    const shop = url.searchParams.get("shop");
+    
+    console.log("Onboarding - URL params:", Object.fromEntries(url.searchParams));
+    
+    if (shop) {
+      console.log("Found shop in URL params, redirecting to auth/login with shop:", shop);
+      return redirect(`/auth/login?shop=${encodeURIComponent(shop)}`);
+    }
+    
+    // Try to extract shop from referer
+    const referer = request.headers.get("referer");
+    console.log("Onboarding - Referer:", referer);
+    
+    if (referer) {
+      try {
+        const refererUrl = new URL(referer);
+        const shopFromReferer = refererUrl.searchParams.get("shop");
+        
+        if (shopFromReferer) {
+          console.log("Found shop in referer params, redirecting to auth/login with shop:", shopFromReferer);
+          return redirect(`/auth/login?shop=${encodeURIComponent(shopFromReferer)}`);
+        }
+        
+        // Try to extract from host parameter in referer
+        const hostParam = refererUrl.searchParams.get("host");
+        if (hostParam) {
+          try {
+            const decodedHost = atob(hostParam);
+            console.log("Decoded host:", decodedHost);
+            const hostMatch = decodedHost.match(/admin\.shopify\.com\/store\/([^\/]+)/);
+            if (hostMatch && hostMatch[1]) {
+              const shopFromHost = hostMatch[1];
+              console.log("Found shop in host parameter, redirecting to auth/login with shop:", shopFromHost);
+              return redirect(`/auth/login?shop=${encodeURIComponent(shopFromHost)}.myshopify.com`);
+            }
+          } catch (decodeError) {
+            console.log("Error decoding host parameter:", decodeError);
+          }
+        }
+        
+        // Try to extract from referer domain
+        const shopFromDomain = referer.match(/https?:\/\/([^.]+)\.myshopify\.com/)?.[1];
+        if (shopFromDomain) {
+          console.log("Found shop in referer domain, redirecting:", shopFromDomain);
+          return redirect(`/auth/login?shop=${encodeURIComponent(shopFromDomain)}.myshopify.com`);
+        }
+        
+      } catch (refererError) {
+        console.log("Error parsing referer URL:", refererError);
+      }
+    }
+    
+    // Check for shop in cookies as fallback
+    const cookies = request.headers.get("cookie");
+    if (cookies) {
+      const shopCookie = cookies.match(/shop=([^;]+)/);
+      if (shopCookie && shopCookie[1]) {
+        const shopFromCookie = decodeURIComponent(shopCookie[1]);
+        console.log("Found shop in cookie, redirecting:", shopFromCookie);
+        return redirect(`/auth/login?shop=${encodeURIComponent(shopFromCookie)}`);
+      }
+    }
+    
+    console.log("Could not determine shop from any source, re-throwing error");
+    // If we can't determine the shop, re-throw the original error
+    throw error;
   }
-
-  const url = new URL(request.url);
-  const step = parseInt(url.searchParams.get("step") || "1");
-
-  return json({
-    shop: session.shop,
-    currentStep: Math.max(1, Math.min(4, step)),
-    settings: settings || null,
-  });
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
