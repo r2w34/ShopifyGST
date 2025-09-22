@@ -1,0 +1,248 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Shopify session management
+model Session {
+  id          String    @id
+  shop        String
+  state       String
+  isOnline    Boolean   @default(false)
+  scope       String?
+  expires     DateTime?
+  accessToken String
+  userId      BigInt?
+  firstName   String?
+  lastName    String?
+  email       String?
+  accountOwner Boolean  @default(false)
+  locale      String?
+  collaborator Boolean? @default(false)
+  emailVerified Boolean? @default(false)
+}
+
+// GST-compliant invoice model
+model Invoice {
+  id                String   @id @default(cuid())
+  invoiceNumber     String   @unique
+  shopifyOrderId    String?
+  customerId        String
+  customerName      String
+  customerEmail     String?
+  customerPhone     String?
+  customerGSTIN     String?
+  
+  // Billing Address
+  billingAddress    Json
+  
+  // Shipping Address
+  shippingAddress   Json?
+  
+  // Invoice Details
+  invoiceDate       DateTime @default(now())
+  dueDate           DateTime?
+  status            InvoiceStatus @default(DRAFT)
+  
+  // Items
+  items             Json // Array of invoice items with HSN codes
+  
+  // Tax Calculations
+  subtotal          Float
+  cgstAmount        Float    @default(0)
+  sgstAmount        Float    @default(0)
+  igstAmount        Float    @default(0)
+  totalTax          Float
+  totalAmount       Float
+  
+  // GST Details
+  placeOfSupply     String
+  reverseCharge     Boolean  @default(false)
+  
+  // Additional Fields
+  notes             String?
+  terms             String?
+  
+  // Timestamps
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Relations
+  customer          Customer @relation(fields: [customerId], references: [id])
+  shippingLabels    ShippingLabel[]
+  
+  @@map("invoices")
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+// Customer management with GST support
+model Customer {
+  id            String   @id @default(cuid())
+  shopifyId     String?  @unique
+  name          String
+  email         String?
+  phone         String?
+  gstin         String?
+  
+  // Address Information
+  addresses     Json     // Array of addresses
+  
+  // Business Information
+  businessName  String?
+  businessType  String?
+  
+  // Additional Fields
+  notes         String?
+  tags          String?
+  
+  // Timestamps
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // Relations
+  invoices      Invoice[]
+  shippingLabels ShippingLabel[]
+  
+  @@map("customers")
+}
+
+// Shipping label management
+model ShippingLabel {
+  id              String   @id @default(cuid())
+  labelNumber     String   @unique
+  invoiceId       String?
+  customerId      String
+  
+  // Shipping Details
+  fromAddress     Json
+  toAddress       Json
+  
+  // Package Information
+  weight          Float
+  dimensions      Json     // {length, width, height}
+  packageType     String
+  
+  // Courier Information
+  courierService  String
+  trackingNumber  String?
+  awbNumber       String?
+  
+  // Label Details
+  labelUrl        String?
+  qrCode          String?
+  barcode         String?
+  
+  // Status
+  status          ShippingStatus @default(CREATED)
+  
+  // Timestamps
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relations
+  invoice         Invoice? @relation(fields: [invoiceId], references: [id])
+  customer        Customer @relation(fields: [customerId], references: [id])
+  
+  @@map("shipping_labels")
+}
+
+enum ShippingStatus {
+  CREATED
+  PRINTED
+  SHIPPED
+  IN_TRANSIT
+  DELIVERED
+  RETURNED
+}
+
+// App settings and configuration
+model AppSettings {
+  id                String   @id @default(cuid())
+  shop              String   @unique
+  
+  // Company Information
+  companyName       String
+  companyGSTIN      String
+  companyAddress    Json
+  companyLogo       String?
+  
+  // Invoice Settings
+  invoicePrefix     String   @default("INV")
+  invoiceCounter    Int      @default(1)
+  defaultGSTRate    Float    @default(18)
+  
+  // Email Settings
+  emailEnabled      Boolean  @default(false)
+  smtpSettings      Json?
+  
+  // WhatsApp Settings
+  whatsappEnabled   Boolean  @default(false)
+  twilioSettings    Json?
+  
+  // Timestamps
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@map("app_settings")
+}
+
+// Subscription and billing
+model Subscription {
+  id              String   @id @default(cuid())
+  shop            String   @unique
+  planName        String
+  status          SubscriptionStatus
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  
+  // Billing
+  amount          Float
+  currency        String   @default("INR")
+  
+  // Features
+  features        Json     // Array of enabled features
+  
+  // Usage Tracking
+  invoicesGenerated Int    @default(0)
+  labelsGenerated   Int    @default(0)
+  
+  // Timestamps
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@map("subscriptions")
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELLED
+  EXPIRED
+  TRIAL
+}
+
+// Webhook logs for debugging
+model WebhookLog {
+  id        String   @id @default(cuid())
+  shop      String
+  topic     String
+  payload   Json
+  processed Boolean  @default(false)
+  error     String?
+  createdAt DateTime @default(now())
+  
+  @@map("webhook_logs")
+}
