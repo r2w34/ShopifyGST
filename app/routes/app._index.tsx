@@ -31,9 +31,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     where: { shop: session.shop },
   });
 
-  // If no settings or incomplete onboarding, redirect to onboarding
+  // If no settings or incomplete onboarding, redirect to onboarding with shop parameter
   if (!settings || !settings.companyName || !settings.companyGSTIN) {
-    return redirect("/app/onboarding");
+    const url = new URL(request.url);
+    const searchParams = new URLSearchParams(url.search);
+    searchParams.set('shop', session.shop);
+    
+    console.log("Redirecting to onboarding with shop parameter:", session.shop);
+    return redirect(`/app/onboarding?${searchParams.toString()}`);
   }
 
   // Get dashboard statistics
