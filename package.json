@@ -1,0 +1,29 @@
+{
+  "name": "invoiceo-shopify-app",
+  "version": "1.0.0",
+  "description": "InvoiceO - Your Invoice and Shipping Label partner for Shopify",
+  "main": "professional-shipping-label-app.js",
+  "scripts": {
+    "start": "node professional-shipping-label-app.js",
+    "dev": "nodemon professional-shipping-label-app.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "pdfkit": "^0.13.0",
+    "jsbarcode": "^3.11.5",
+    "canvas": "^2.11.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "keywords": [
+    "shopify",
+    "shipping",
+    "labels",
+    "gst",
+    "invoice",
+    "api"
+  ],
+  "author": "InvoiceO Team",
+  "license": "MIT"
+}
